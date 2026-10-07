@@ -1,0 +1,64 @@
+# Template: rendered with envsubst by scripts/bluegreen.sh
+# Vars: COLOR IMAGE VERSION REPLICAS ERROR_RATE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-${COLOR}
+  namespace: demo
+  labels: { app: demo-bg, color: "${COLOR}" }
+spec:
+  replicas: ${REPLICAS}
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app: demo-bg, color: "${COLOR}" }
+  template:
+    metadata:
+      labels: { app: demo-bg, color: "${COLOR}", version: "${VERSION}" }
+    spec:
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: demo-bg, color: "${COLOR}" }
+      containers:
+        - name: app
+          image: ${IMAGE}
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: VERSION, value: "${VERSION}" }
+            - { name: ERROR_RATE, value: "${ERROR_RATE}" }
+            - { name: STARTUP_DELAY_SEC, value: "3" }
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            periodSeconds: 2
+            failureThreshold: 2
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: [ALL] }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: demo-${COLOR}
+  namespace: demo
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: demo-bg, color: "${COLOR}" }

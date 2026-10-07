@@ -1,0 +1,54 @@
+name: deploy
+# Production-style pipeline: test -> build & push image -> blue-green deploy to EKS.
+# Requires repository variables AWS_DEPLOY_ROLE_ARN, AWS_REGION, ECR_REPOSITORY, EKS_CLUSTER
+# (all produced by `terraform apply`; see README). Manual trigger only, so forks stay inert.
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: Release strategy
+        type: choice
+        options: [bluegreen, canary]
+        default: bluegreen
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production # add required reviewers here for a manual approval gate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - run: cd app && go test -race ./...
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push (immutable tag = git SHA)
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${GITHUB_SHA::12}"
+          docker build -t "$IMAGE" app
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - run: aws eks update-kubeconfig --name "${{ vars.EKS_CLUSTER }}" --region "${{ vars.AWS_REGION }}"
+      - run: sudo apt-get install -y gettext-base
+
+      - name: Release
+        run: |
+          VERSION="${GITHUB_SHA::12}"
+          if [ "${{ inputs.strategy }}" = "canary" ]; then
+            BASE_URL="http://$(kubectl -n demo get svc demo-canary -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')" \
+              ./scripts/canary.sh "$IMAGE" "$VERSION"
+          else
+            ./scripts/bluegreen.sh "$IMAGE" "$VERSION"
+          fi

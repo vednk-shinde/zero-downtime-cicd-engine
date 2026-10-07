@@ -1,0 +1,47 @@
+# Template: rendered by scripts/canary.sh. Vars: TRACK (stable|canary) IMAGE VERSION REPLICAS ERROR_RATE
+# Stable and canary pods share the label `app: demo-canary`, so the Service load-balances
+# across both; traffic share == pod share.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-${TRACK}
+  namespace: demo
+  labels: { app: demo-canary, track: "${TRACK}" }
+spec:
+  replicas: ${REPLICAS}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 2 }
+  selector:
+    matchLabels: { app: demo-canary, track: "${TRACK}" }
+  template:
+    metadata:
+      labels: { app: demo-canary, track: "${TRACK}", version: "${VERSION}" }
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app
+          image: ${IMAGE}
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: VERSION, value: "${VERSION}" }
+            - { name: ERROR_RATE, value: "${ERROR_RATE}" }
+            - { name: STARTUP_DELAY_SEC, value: "3" }
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            periodSeconds: 2
+            failureThreshold: 2
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 10m, memory: 24Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: [ALL] }

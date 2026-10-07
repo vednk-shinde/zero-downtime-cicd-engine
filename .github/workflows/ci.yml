@@ -1,0 +1,38 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - run: cd app && go vet ./... && go test -race -count=1 ./...
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=terraform fmt -check -recursive
+      - run: terraform -chdir=terraform init -backend=false
+      - run: terraform -chdir=terraform validate
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y gettext-base shellcheck
+      - run: shellcheck scripts/*.sh
+      - name: Render and schema-validate manifests
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          export IMAGE=demo:ci VERSION=ci REPLICAS=2 ERROR_RATE=0 COLOR=blue TRACK=stable
+          for f in k8s/bluegreen/*.yaml k8s/canary/*.yaml; do
+            envsubst '${COLOR} ${TRACK} ${IMAGE} ${VERSION} ${REPLICAS} ${ERROR_RATE}' < "$f" | ./kubeconform -strict -summary -
+          done

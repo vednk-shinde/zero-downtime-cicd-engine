@@ -1,0 +1,25 @@
+name: zero-downtime-e2e
+# Proves the claims in the README on every push: a real Kubernetes cluster (kind) is created,
+# blue-green and canary releases are rolled out under continuous traffic, a bad canary is
+# rejected automatically, and pods are killed to verify self-healing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1
+        with:
+          install_only: true
+      - run: sudo apt-get install -y gettext-base
+      - run: ./scripts/e2e.sh
+      - if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          kubectl -n demo describe pods | tail -150 || true

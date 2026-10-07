@@ -1,0 +1,10 @@
+# Template. The Service selector's `color` is the traffic switch.
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-bg
+  namespace: demo
+spec:
+  type: NodePort
+  selector: { app: demo-bg, color: "${COLOR}" }
+  ports: [{ port: 80, targetPort: 8080, nodePort: 30080 }]
