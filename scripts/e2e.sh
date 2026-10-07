@@ -6,7 +6,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 CLUSTER=${CLUSTER:-zdt}
 BG=http://localhost:8080
 CA=http://localhost:8081
-v() { curl -fs "$1/version"; }
+# version of whatever is live; retries while kube-proxy programs a fresh Service
+v() { for _ in $(seq 1 30); do curl -fs --max-time 2 "$1/version" && return 0; sleep 1; done; return 1; }
 
 if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
   kind create cluster --name "$CLUSTER" --config "$ROOT/k8s/kind.yaml" --wait 120s
