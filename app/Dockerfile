@@ -7,5 +7,5 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/app .
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/app /app
 EXPOSE 8080
-USER nonroot
+USER 65532:65532
 ENTRYPOINT ["/app"]

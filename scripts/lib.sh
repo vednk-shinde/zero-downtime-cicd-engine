@@ -2,6 +2,7 @@
 # Shared helpers for the deployment scripts.
 set -euo pipefail
 
+# shellcheck disable=SC2034 # used by the scripts that source this file
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NS=${NS:-demo}
 
@@ -12,6 +13,7 @@ ensure_ns() { kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl 
 
 # render <template> : substitutes only the variables we own (leaves ${...} elsewhere alone)
 render() {
+  # shellcheck disable=SC2016 # literal ${VAR} names are what envsubst expects
   envsubst '${COLOR} ${TRACK} ${IMAGE} ${VERSION} ${REPLICAS} ${ERROR_RATE}' <"$1"
 }
 

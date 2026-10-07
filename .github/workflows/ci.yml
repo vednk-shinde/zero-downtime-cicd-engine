@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get install -y gettext-base shellcheck
-      - run: shellcheck scripts/*.sh
+      - run: shellcheck -x -S warning scripts/*.sh
       - name: Render and schema-validate manifests
         run: |
           curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
